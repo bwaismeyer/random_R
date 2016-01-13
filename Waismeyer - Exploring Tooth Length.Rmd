@@ -1,0 +1,196 @@
+---
+title: "Exploring the Effect of Vitamin C on Tooth Growth in Guinea Pigs"
+author: "Brian Waismeyer"
+date: "Sunday, May 24, 2015"
+output: pdf_document
+---
+## Overview
+In this report we will explore the ToothGrow dataset included in the default
+R `datasets` package. This dataset is based on a research study with 10 guinea
+pigs who were given a vitamin C supplement.
+
+The researchers varied how the supplement was delivered and in what dose. They 
+measured guinea pig tooth length for all 10 guinea pigs for each dose/delivery
+combination (2 delivery types * 3 doses * 10 guinea pigs = 60 records total).
+
+More information about this dataset is available 
+[here](https://stat.ethz.ch/R-manual/R-devel/library/datasets/html/ToothGrowth.html).
+
+We will investigate and test the hypotheses that:
+
+1. Tooth length is associated with the manner in which the vitamin C supplement
+was delivered.
+2. Tooth length is associated with the size of vitamin C dose given to a guinea
+pig.
+
+
+## Load Supporting Resources
+We take a moment to load any packages we want to use in this report. These need
+to be installed and loaded in your R environment if you want to reproduce
+the report in full.
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+```
+
+## Load and Explore the Data
+We load the data and visualize the key variables of interest.
+
+```{r}
+# load the data and then assign the dataset to a shorter name for convenience
+# (and in case we want to return to the original data for any reason)
+data(ToothGrowth)
+tg <- ToothGrowth
+
+# inspect the dataframe
+str(tg)
+
+# add a factored version of dose for cases where we might want to treat this
+# as a grouping variable (e.g. plotting)
+tg$dose_level <- factor(tg$dose)
+
+# observe the mean tooth length and standard deviation for each delivery type
+sum_supp <- summarise(group_by(tg, supp), 
+                      mean_length = mean(len),
+                      sd_length = sd(len))
+
+# observe the mean tooth length and standard deviation for each dose combination
+sum_dose <- summarise(group_by(tg, dose_level), 
+                      mean_length = mean(len),
+                      sd_length = sd(len))
+
+# for each dose/delivery combination
+sum_combo <- summarise(group_by(tg, supp, dose_level), 
+                       mean_length = mean(len),
+                       sd_length = sd(len))
+
+# print the summaries along with a visualization of each
+sum_supp
+ggplot(sum_supp, aes(x = supp, y = mean_length)) +
+    geom_bar(stat = "identity") +
+    labs(title = "Mean Tooth Length by Delivery Type") +
+    theme_fivethirtyeight()
+
+sum_dose
+ggplot(sum_dose, aes(x = dose_level, y = mean_length)) +
+    geom_bar(stat = "identity") +
+    labs(title = "Mean Tooth Length by Dose") +
+    theme_fivethirtyeight()
+
+sum_combo
+ggplot(sum_combo, aes(x = supp, y = mean_length, fill = dose_level)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(title = "Mean Tooth Length by Delivery Type and Dose") +
+    theme_fivethirtyeight()
+
+```
+
+
+## Hypothesis Testing
+Here we perform the calculations needed to assess whether our observed data
+support our hypotheses or are insufficient to draw clear conclusions.
+
+The most appropriate approach would be test the overall delivery type ~ dosage
+relationship using a multi-way ANOVA. However, assignment directions dictate
+that we only make use of techniques discussed in the current course.
+
+As a result, we will simply test the hypotheses associated with our main effects
+and we will simply employ t-tests to explore the relevant pairwise comparisons.
+
+### Hypothesis 1: Delivery Type ~ Tooth Length
+Is tooth length associated with the manner in which the vitamin C supplement
+was delivered?
+
+```{r}
+# we use a conservative t-test: two-sided, assuming unequal variance
+# since we don't have pairing information, we treat the groups as independent
+t.test(len ~ supp,
+       data = tg,
+       alternative = "two.sided",
+       var.equal = FALSE
+       )
+```
+
+The null hypothesis we are tested is that the difference between our sample
+means is 0 (aka - the samples have the same means).
+
+The observed p-value suggests marginal significance - we don't make the classic
+p < 0.05 cut-off, but we're close. We can see this marginal significance echoed
+in the 95% confidence interval - the majority of likely distributions of
+differences between the means include values larger than 0.
+
+I would treat this as weak evidence that the delivery type may be associated
+with tooth length, with OJ being associated with longer teeth.
+
+
+### Hypothesis 2: Dosage ~ Tooth Length
+Is tooth length associated with the size of the vitamin C dosage?
+
+Ideally, we would test this with an ANOVA. However, per assignment directions,
+we will restrict our analysis to those presened in the course and will instead
+treat the results as being three pairwise comparisons.
+
+```{r}
+# as before, we use conservative t-tesst: two-sided, assuming unequal variance
+# since we don't have pairing information, we treat the groups as independent
+
+# 0.5 v 1.0
+tg_05_10 <- tg[tg$dose_level == "0.5" | tg$dose_level == "1", ]
+t.test(len ~ dose_level,
+       data = tg_05_10,
+       alternative = "two.sided",
+       var.equal = FALSE
+       )
+
+# 0.5 v 2.0
+tg_05_20 <- tg[tg$dose_level == "0.5" | tg$dose_level == "2", ]
+t.test(len ~ dose_level,
+       data = tg_05_20,
+       alternative = "two.sided",
+       var.equal = FALSE
+       )
+
+# 1.0 v 2.0
+tg_10_20 <- tg[tg$dose_level == "1" | tg$dose_level == "2", ]
+t.test(len ~ dose_level,
+       data = tg_10_20,
+       alternative = "two.sided",
+       var.equal = FALSE
+       )
+
+```
+
+All comparisons were statistically significant. That is, the observed p-values
+and confidence intervals suggest that it is unlikely the true distribution of
+differences between sample means includes "0" (no differences between the 
+samples) for any of the comparisons.
+
+This supports the hypothesis that there is an association between dosage and
+tooth length. The magnitude of the dosages and the observed tooth lengths
+suggest that tooth length tends to increase with dosage.
+
+
+## Assumptions and Conclusions
+For purpose of this report, we have assumed that it is acceptable to treat our
+comparison groups as independent. Given that we know the data came from the 
+same guinea pigs (i.e., the comparison are within-group rather than between),
+this is not ideal. However, independent groups t-tests tend to have less
+power than paired t-tests and we were conservative about the kinds of t-tests
+we ran.
+
+To avoid an explosion in the number of pairwise comparison we needed to conduct,
+we also restricted our analyses to only investigating main effects. It is
+possible, however, that interactions between independent variables can make
+interpreting main effects problematic. Thus, we also assumed that any main
+effects we observed would hold even in the presence of possible delivery type ~
+dosage interaction.
+
+With the above assumptions in mind, we observed weak evidence that delivery type
+is associated with tooth length (OJ being associated with longer teeth than 
+ascorbic acid) and reasonable evidence that dosage size is
+associated with tooth length (larger doses being associated with longer teeth.
+
+It would appear that delivery type and dosage should be considered if trying
+to understand or influence tooth length in guinea pigs.
